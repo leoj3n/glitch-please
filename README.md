@@ -2,7 +2,7 @@
 
 This package was created to enhance both expreince and productivity while
 hacking on [Glitch](https://glitch.com/) and localhost projects that employ
-build commmands to generate a distrubitable.
+build commmands to generate a distributable.
 
 It does this by providing a special server that is capable of watching for file
 changes, running build commands, emitting IO events over sockets, and
