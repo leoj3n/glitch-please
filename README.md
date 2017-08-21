@@ -5,8 +5,8 @@ hacking on [Glitch](https://glitch.com/) and localhost projects that employ
 build commmands to generate a distrubitable.
 
 It does this by providing a special server that is capable of watching for file
-changes, running build commands, emitting IO events, and refreshing connected
-clients as needed.
+changes, running build commands, emitting IO events over sockets, and
+refreshing connected clients as needed.
 
 ## Quick Start
 
