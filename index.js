@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const chokidar = require('chokidar');
 const socketio = require('socket.io');
+const { PleaseWatch } = require('./please-watch');
 const { PleaseRun } = require('./please-run');
 const { PleaseServe } = require('./please-serve');
 
@@ -15,28 +15,28 @@ const { PleaseServe } = require('./please-serve');
 //
 class GlitchPlease {
   get appPackageJSON() {
-    return require(path.join(this.appPath, 'package.json'));
+    return require(path.join(this.appRoot, 'package.json'));
   }
 
-  get installPatterns() {
-    return this._installPatterns(this.appPackageJSON);
+  get appIsInstalled() {
+    return this._appIsInstalled(this.appRoot);
   }
-  set installPatterns(func) {
-    this._installPatterns = func;
-  }
-
-  get buildPatterns() {
-    return this._buildPatterns(this.appPackageJSON);
-  }
-  set buildPatterns(func) {
-    this._buildPatterns = func;
+  set appIsInstalled(func) {
+    this._appIsInstalled = func;
   }
 
-  get distDirectory() {
-    return this._distDirectory(this.appPackageJSON);
+  get appInstallPatterns() {
+    return ['package.json'].concat(this._appInstallPatterns(this.appPackageJSON));
   }
-  set distDirectory(func) {
-    this._distDirectory = func;
+  set appInstallPatterns(func) {
+    this._appInstallPatterns = func;
+  }
+
+  get distPath() {
+    return this._distPath(this.appRoot, this.appPackageJSON);
+  }
+  set distPath(func) {
+    this._distPath = func;
   }
 
   get distRoute() {
@@ -46,39 +46,27 @@ class GlitchPlease {
     this._distRoute = func;
   }
 
-  get distPath() {
-    return path.join(this.appPath, this.distDirectory);
-  }
-
-  get watchPatterns() {
-    return this.installPatterns.concat(this.buildPatterns);
-  }
-
   constructor({
-    appPath = 'app',
-    installedDirectory = ['node_modules'],
-    installPatterns = () => ['package.json'],
-    buildCommand = { cmd: 'npm', args: ['run', 'build'] },
-    buildPatterns = () => ['*.html', 'images', 'scripts', 'styles'],
+    appRoot = path.join(process.cwd(), 'kennel'),
+    appIsInstalled = (appRoot) => fs.existsSync(path.join(appRoot, 'node_modules')),
+    appInstallPatterns = (appPackageJSON) => [],
+    distPath = (appRoot, appPackageJSON) => path.join(appRoot, 'dist'),
+    distRoute = (appPackageJSON) => '/',
     distIndex = 'index.html',
-    distDirectory = () => 'dist',
-    distRoute = () => '/dist',
   } = {}) {
+    this.watcher = new PleaseWatch();
     this.server = new PleaseServe();
     this.runner = new PleaseRun();
 
-    this.appPath = appPath;
-    this.appPackage = path.join(this.appPath, 'package.json');
+    this.appRoot = appRoot;
+    this.appPackage = path.join(this.appRoot, 'package.json');
 
-    this.installedDirectory = installedDirectory;
-    this.installPatterns = installPatterns;
-    this.buildCommand = buildCommand;
-    this.buildPatterns = buildPatterns;
-    this.distIndex = distIndex;
-    this.distDirectory = distDirectory;
+    this.appIsInstalled = appIsInstalled;
+    this.appInstallPatterns = appInstallPatterns;
+    this.distPath = distPath;
     this.distRoute = distRoute;
+    this.distIndex = distIndex;
 
-    this.watcher = chokidar.watch(this.watchPatterns, { cwd: this.appPath, ignoreInitial: true });
     this.io = socketio(this.server.server);
   }
 
@@ -119,10 +107,48 @@ class GlitchPlease {
       return; // abort mission
     }
 
-    this.runEmitReload('npm', ['run', task], this.appPath);
+    this.runEmitReload('npm', ['run', task], this.appRoot);
   };
 
-  beginCommunication() {
+  appWatchRun(watchPatterns, command, wait) {
+    this.watcher.watch(
+      () => watchPatterns(this.appPackageJSON),
+      { cwd: this.appRoot, ignoreInitial: true },
+      (ev, file) => {
+        this.runner.scheduleRun(() => {
+          this.runEmitReload(command.cmd, command.args, this.appRoot);
+        }, wait);
+      }
+    );
+  }
+
+  appWatchInstall() {
+    this.watcher.watch(
+      () => this.appInstallPatterns,
+      { cwd: this.appRoot, ignoreInitial: true },
+      (ev, file) => {
+        this.runner.scheduleRun(() => {
+          this.runEmitReload('npm', ['install'], this.appRoot)
+            .on('close', (code) => {
+              // delete old package configuration
+              delete require.cache[require.resolve(this.appPackage)];
+
+              // close and re-open watchers registered with appWatchRun
+              this.watcher.refreshAll();
+
+              // change the server route for the app distributable
+              this.server.setDistAppRoute(this.distRoute, this.distPath, this.distIndex);
+
+              // emit updated config to any listening consoles
+              this.io.sockets.emit('package-json', this.appPackageJSON);
+              this.io.sockets.emit('dist-route', this.distRoute);
+            });
+        }, 3000);
+      }
+    );
+  }
+
+  socketConnection() {
     this.io.on('connection', (socket) => {
       // Tell the connecting client the project domain when running on Glitch.
       if (process.env.PROJECT_DOMAIN) {
@@ -142,35 +168,7 @@ class GlitchPlease {
     });
   }
 
-  beginWatching() {
-    this.watcher.on('ready', () => {
-      //https://github.com/paulmillr/chokidar/issues/338
-      //console.log(`Watching in ${this.appPath}: \n`, this.watcher.getWatched());
-
-      this.watcher.on('all', (ev, file) => {
-        if (this.installPatterns.indexOf(file) > -1) {
-          // A file has changed in the app that requires npm install.
-          this.runner.scheduleRun(() => {
-            this.runEmitReload('npm', ['install'], this.appPath)
-              .on('close', (code) => {
-                delete require.cache[require.resolve(this.appPackage)];
-                //console.log(this.appPackageJSON);
-                this.server.setDistAppRoute(this.distRoute, this.distPath, this.distIndex);
-                this.io.sockets.emit('package-json', this.appPackageJSON);
-                this.io.sockets.emit('dist-route', this.distRoute);
-                // TODO: Update the files chokidar is watching using unwatch/add.
-              });
-          }, 3000);
-        } else {
-          this.runner.scheduleRun(() => {
-            this.runEmitReload(this.buildCommand.cmd, this.buildCommand.args, this.appPath);
-          }, 1500);
-        }
-      });
-    });
-  }
-
-  begin() { 
+  startup() { 
     //
     // Start the server.
     //
@@ -182,21 +180,21 @@ class GlitchPlease {
     // Start client-server communication.
     //
 
-    this.beginCommunication();
+    this.socketConnection();
 
     // 
     // Initialize the app we're going to watch, build, and serve.
     //
 
-    if ( ! fs.existsSync(path.join(this.appPath, ...this.installedDirectory)) ) {
-      this.runEmitReload('npm', ['install'], this.appPath);
+    if ( ! this.appIsInstalled ) {
+      this.runEmitReload('npm', ['install'], this.appRoot);
     }
 
     //
     // Start watching for changes.
     //
 
-    this.beginWatching();
+    this.appWatchInstall();
   }
 }
 

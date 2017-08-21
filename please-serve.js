@@ -61,7 +61,7 @@ class ReloadingApp {
     this.app = express();
     this.reloader = reload(server, this.app);
 
-    this.app.use('/reload', express.static(path.dirname(require.resolve('reload'))));
+    this.app.use('*/reload', express.static(path.dirname(require.resolve('reload'))));
 
     this.app.use(interceptor((req, res) => ({
       isInterceptable() {
