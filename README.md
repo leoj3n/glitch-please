@@ -1,6 +1,6 @@
 # Glitch, Please!
 
-This package was created to enhance both expreince and productivity while
+This package was created to enhance both experience and productivity while
 hacking on [Glitch](https://glitch.com/) and localhost projects that employ
 build commands to generate a distributable.
 
