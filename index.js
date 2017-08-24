@@ -74,11 +74,13 @@ class GlitchPlease {
     // Runs the passed command, emitting command/stdout/stderr.
     // Triggers the server to reload clients upon finishing.
 
-    var proc = this.runner.run(cmd, args, dir);
+    const proc = this.runner.run(cmd, args, dir);
+    const commandString = `${cmd} ${args.join(' ')}`;
 
-    this.io.sockets.emit('command', `${cmd} ${args.join(' ')}`);
+    this.io.sockets.emit('command', commandString);
 
     proc.on('close', (code) => {
+      this.io.sockets.emit('command-end', commandString);
       this.server.reloadDistAppClients();
     });
     
