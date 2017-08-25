@@ -16,6 +16,10 @@ class PleaseRun {
     const proc = spawn(cmd, args, { cwd: dir });
     this.RUN_COUNT++;
     console.log(`${cmd} process spawned`);
+    proc.on('error', (err) => {
+      this.RUN_COUNT--;
+      console.log(`Failed to start ${cmd} process.`);
+    });
     proc.on('close', (code) => {
       this.RUN_COUNT--;
       console.log(`${cmd} exited with code ${code}`);
