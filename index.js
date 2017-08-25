@@ -152,6 +152,11 @@ class GlitchPlease {
 
   socketConnection() {
     this.io.on('connection', (socket) => {
+      // Handle errors.
+      socket.on('error', (err) => {
+        console.warn('SocketIO Error: ', err);
+      });
+
       // Tell the connecting client the project domain when running on Glitch.
       if (process.env.PROJECT_DOMAIN) {
         socket.emit('project-domain', process.env.PROJECT_DOMAIN);
@@ -166,6 +171,33 @@ class GlitchPlease {
       // Accept "tasks" from the client to `npm run` in the app.
       socket.on('npm-run', (data) => {
         this.npmRun(data.task);
+      });
+      
+      // Accept requests to view file contents from client.
+      socket.on('request-file', (data) => {
+        var loc = path.join(this.appRoot, data.path);
+        if (fs.existsSync(loc)) {
+          fs.readFile(loc, 'utf8', function(err, theFile) {
+            socket.emit('receive-file', theFile);
+          });
+        } else {
+          socket.emit('command-error', `Cannot locate file at path ${loc}`);
+        }
+      });
+
+      // Accepts file path and contents to write.
+      socket.on('write-file', (data) => {
+        var loc = path.join(this.appRoot, data.path);
+        if (fs.existsSync(loc)) {
+          fs.writeFile(loc, data.content, function(err) {
+            if (err) {
+              socket.emit('command-error', `ERROR: ${err}`);
+              return console.log(err);
+            }
+          }); 
+        } else {
+          socket.emit('command-error', `Cannot locate file at path ${loc}`);
+        }
       });
     });
   }
