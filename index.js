@@ -79,6 +79,10 @@ class GlitchPlease {
 
     this.io.sockets.emit('command', commandString);
 
+    proc.on('error', (err) => {
+      this.io.sockets.emit('command-error', 'Failed to start process!');
+    });
+
     proc.on('close', (code) => {
       this.io.sockets.emit('command-end', commandString);
       this.server.reloadDistAppClients();
