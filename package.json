@@ -23,7 +23,6 @@
     "express-error-handler": "^1.1.0",
     "express-interceptor": "^1.2.0",
     "express-route-reload": "^1.0.0",
-    "reload": "1.1.5",
     "socket.io": "^2.0.3"
   },
   "engines": {

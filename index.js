@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const socketio = require('socket.io');
 const { PleaseWatch } = require('./please-watch');
 const { PleaseRun } = require('./please-run');
 const { PleaseServe } = require('./please-serve');
@@ -66,8 +65,6 @@ class GlitchPlease {
     this.distPath = distPath;
     this.distRoute = distRoute;
     this.distIndex = distIndex;
-
-    this.io = socketio(this.server.server);
   }
 
   runEmitReload(cmd, args, dir) {
@@ -77,24 +74,24 @@ class GlitchPlease {
     const proc = this.runner.run(cmd, args, dir);
     const commandString = `${cmd} ${args.join(' ')}`;
 
-    this.io.sockets.emit('command', commandString);
+    this.server.io.sockets.emit('command', commandString);
 
     proc.on('error', (err) => {
-      this.io.sockets.emit('command-error', 'Failed to start process!');
+      this.server.io.sockets.emit('command-error', 'Failed to start process!');
     });
 
     proc.on('close', (code) => {
-      this.io.sockets.emit('command-end', commandString);
+      this.server.io.sockets.emit('command-end', commandString);
       this.server.reloadDistAppClients();
     });
     
     proc.stdout.on('data', (data) => {
-      this.io.sockets.emit('stdout', data);
+      this.server.io.sockets.emit('stdout', data);
       process.stdout.write(`${data}`);
     });
 
     proc.stderr.on('data', (data) => {
-      this.io.sockets.emit('stderr', data);
+      this.server.io.sockets.emit('stderr', data);
       process.stdout.write(`${data}`);
     });
 
@@ -108,7 +105,7 @@ class GlitchPlease {
     // exploits could be made as part of an `npm run <exploit here>` command.
 
     if (this.runner.RUN_COUNT > 0) {
-      this.io.sockets.emit('command-error',
+      this.server.io.sockets.emit('command-error',
                       `Refusing to run "npm run ${task}" while other commands are running...`);
       return; // abort mission
     }
@@ -146,8 +143,8 @@ class GlitchPlease {
               this.server.setDistAppRoute(this.distRoute, this.distPath, this.distIndex);
 
               // emit updated config to any listening consoles
-              this.io.sockets.emit('package-json', this.appPackageJSON);
-              this.io.sockets.emit('dist-route', this.distRoute);
+              this.server.io.sockets.emit('package-json', this.appPackageJSON);
+              this.server.io.sockets.emit('dist-route', this.distRoute);
             });
         }, 3000);
       }
@@ -155,7 +152,7 @@ class GlitchPlease {
   }
 
   socketConnection() {
-    this.io.on('connection', (socket) => {
+    this.server.io.on('connection', (socket) => {
       // Handle errors.
       socket.on('error', (err) => {
         console.warn('SocketIO Error: ', err);

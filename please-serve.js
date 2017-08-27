@@ -1,8 +1,8 @@
 const path = require('path');
 const http = require('http');
-const reload = require('reload');
 const express = require('express');
 const cheerio = require('cheerio');
+const socketio = require('socket.io');
 const interceptor = require('express-interceptor');
 const errorHandler = require('express-error-handler');
 const { ReloadRouter } = require('express-route-reload');
@@ -17,6 +17,10 @@ class PleaseServe {
     this.app = express();
     this.server = http.createServer(this.app);
     this.app.set('port', process.env.PORT || 3000);
+
+    // By default, socket.io creates a route at "/socket.io" on the server to
+    // be used on the client: <script src="/socket.io/socket.io.js"></script>
+    this.io = socketio(this.server);
 
     // sub app
     this.distApp = new ReloadingApp(this.server);
@@ -57,11 +61,10 @@ class PleaseServe {
 }
 
 class ReloadingApp {
-  constructor(server, limit) {
+  // Pass in a server with io.
+  constructor(server) {
     this.app = express();
-    this.reloader = reload(server, this.app);
-
-    this.app.use('*/reload', express.static(path.dirname(require.resolve('reload'))));
+    this.server = server;
 
     this.app.use(interceptor((req, res) => ({
       isInterceptable() {
@@ -69,14 +72,21 @@ class ReloadingApp {
       },
       intercept(body, send) {
         const $document = cheerio.load(body);
-        $document('body').append('<script src="reload/reload-client.js"></script>');
+        $document('body').append(`
+          <script src="/socket.io/socket.io.js"></script>
+          <script>
+            socket.on('reload-clients', function () {
+              window.location.reload(true)
+            });
+          </script>
+        `);
         send($document.html());
       }
     })));
   }
 
   reloadClients() {
-    this.reloader.reload();
+    this.server.io.emit('reload-clients');
   }
 
   getApp() {
