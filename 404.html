@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>404</title>
+</head>
+
+<body>
+  <h1>404!</h1>
+  <p>If a build is running, this page will automatically refresh when it completes.</p>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    var socket = io();
+    socket.on('reload-clients', function () {
+      window.location.reload(true)
+    });
+  </script>
+</body>
+</html>
