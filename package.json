@@ -1,6 +1,6 @@
 {
   "name": "glitch-please",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "description": "Install/serve/watch/build/repeat for Glitch.com!",
   "homepage": "https://github.com/leoj3n/glitch-please#readme",
   "bugs": {
